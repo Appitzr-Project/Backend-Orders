@@ -1,0 +1,70 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Deploy Main or Master branch
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create commit comment
+        uses: peter-evans/commit-comment@v1
+        with:
+          body: |
+            Commit telah kami terima, saat ini code terbaru akan di Deploy secara automatis ke:
+            - Domain: **http://api.appitzr.co/orders**
+            - Deploy Status: **https://github.com/Appitzr-Project/Backend-Orders/actions**
+            
+            Anda akan menerima notifikasi jika deploy telah selesai dilakukan, harap menunggu notifikasi selanjutnya.!
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      matrix:
+        node-version: [ 12.x ]
+
+    steps:
+      - name: Clone Repository
+        uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Generate ~/.npmrc
+        run: |
+          echo "@base-pojokan:registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "@appitzr-project:registry=https://npm.pkg.github.com/" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.PERSONAL_TOKEN }}" >> ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+      - run: npm install serverless -g
+      - name: Serverless Deploy
+        run: serverless deploy --stage prod --verbose
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SLS_DEBUG: "*"
+          COGNITO_POOL_ID: ${{ secrets.COGNITO_POOL_ID }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+  done:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Create commit comment
+        uses: peter-evans/commit-comment@v1
+        with:
+          body: |
+            Deploy sukses, anda bisa mengecek preview website di:
+            - Domain: **http://api.appitzr.co/orders**
+            - Deploy Status: **https://github.com/Appitzr-Project/Backend-Orders/actions**
+
+            Jika ada kendala, jangan ragu untuk menghubungi team devops.!
