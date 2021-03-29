@@ -3,12 +3,14 @@ import * as express from 'express';
 import { Request, Response, NextFunction } from 'express';
 import * as helmet from 'helmet';
 import * as serverless from 'serverless-http';
+import * as cors from 'cors';
 import routes from './route';
 
 // express instance
 const app = express();
 
 // express middleware
+app.use(cors());
 app.disable('x-powered-by');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
