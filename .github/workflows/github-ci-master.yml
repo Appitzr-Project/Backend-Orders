@@ -5,7 +5,7 @@ name: Deploy Main or Master branch
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   check:
@@ -18,7 +18,7 @@ jobs:
             Commit telah kami terima, saat ini code terbaru akan di Deploy secara automatis ke:
             - Domain: **http://api.appitzr.co/orders**
             - Deploy Status: **https://github.com/Appitzr-Project/Backend-Orders/actions**
-            
+
             Anda akan menerima notifikasi jika deploy telah selesai dilakukan, harap menunggu notifikasi selanjutnya.!
 
   build:
@@ -26,7 +26,7 @@ jobs:
     needs: check
     strategy:
       matrix:
-        node-version: [ 12.x ]
+        node-version: [12.x]
 
     steps:
       - name: Clone Repository
@@ -54,6 +54,7 @@ jobs:
           SLS_DEBUG: "*"
           COGNITO_POOL_ID: ${{ secrets.COGNITO_POOL_ID }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          NODE_ENV: PROD
 
   done:
     runs-on: ubuntu-latest
