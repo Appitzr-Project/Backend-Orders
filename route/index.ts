@@ -1,12 +1,12 @@
 import * as express from 'express';
 import { Request, Response } from 'express';
-import { profileIndex } from '../controller/profileController';
+import { orderDetail } from '../controller/OrderDetailController';
 
 // Route Declare
 const route = express.Router();
 
 // Route List
-route.get('/', profileIndex);
+route.get('/:id', orderDetail);
 
 // health check api
 route.get('/health-check', (req: Request, res: Response) => {
