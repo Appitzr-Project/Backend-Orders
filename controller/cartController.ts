@@ -5,6 +5,7 @@ import { RequestAuthenticated, userDetail } from "@base-pojokan/auth-aws-cognito
 import * as AWS from 'aws-sdk';
 import { validationMessage, trans } from '@base-pojokan/express-validate-message';
 import { v4 as uuidv4 } from 'uuid';
+import { venueCleanup } from "../utils";
 
 // declare database dynamodb
 const ddb = new AWS.DynamoDB.DocumentClient({ endpoint: process.env.DYNAMODB_LOCAL, convertEmptyValues: true });
@@ -186,7 +187,8 @@ export const cartStore = async (
                         totalPrice: orderUpdate?.Attributes.totalPrice,
                         orderStatus: orderUpdate?.Attributes.orderStatus,
                         createdAt: orderUpdate?.Attributes.createdAt,
-                        updatedAt: orderUpdate?.Attributes.updatedAt
+                        updatedAt: orderUpdate?.Attributes.updatedAt,
+                        venue: venueCleanup(venueData?.Items[0])
                     }
                 });
             } else {
@@ -242,10 +244,102 @@ export const cartStore = async (
                 totalPrice: orderInputNew.totalPrice,
                 orderStatus: orderInputNew.orderStatus,
                 createdAt: orderInputNew.createdAt,
-                updatedAt: orderInputNew.updatedAt
+                updatedAt: orderInputNew.updatedAt,
+                venue: venueCleanup(venueData?.Items[0])
             }
         });
     } catch (e) {
         next(e);
     }
 };
+
+export const cartShow = async (
+    req: RequestAuthenticated,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        // get user login
+        const user = userDetail(req);
+
+        // get user detail
+        const userQuery: AWS.DynamoDB.DocumentClient.GetItemInput = {
+            TableName: userProfileModel.TableName,
+            Key: {
+                cognitoId: user?.sub,
+                email: user?.email
+            }
+        }
+        const userData = await ddb.get(userQuery).promise();
+
+        // if user profile detail not found, return error
+        if (!userData.Item) {
+            return next(new Error('User Data Not Found.!'));
+        }
+
+        // find if user has cart or not
+        const cartQuery: AWS.DynamoDB.DocumentClient.QueryInput = {
+            TableName: ordersModel.TableName,
+            IndexName: 'userIdIndex',
+            KeyConditionExpression: '#uId = :uId',
+            FilterExpression: '#os = :os',
+            ExpressionAttributeNames: {
+                '#uId': 'userId',
+                '#os': 'orderStatus'
+            },
+            ExpressionAttributeValues: {
+                ':uId': userData?.Item.id,
+                ':os': 'cart'
+            },
+            Limit: 1
+        }
+        const cartData = await ddb.query(cartQuery).promise();
+
+        // return success without data if data not found
+        if (cartData && cartData.Count === 0) {
+            return res.status(200).json({
+                code: 200,
+                message: 'Cart is Empty',
+            });
+        }
+
+        // get venue detail
+        const venueQuery: AWS.DynamoDB.DocumentClient.QueryInput = {
+            TableName: venueProfileModel.TableName,
+            IndexName: 'idIndex',
+            KeyConditionExpression: '#id = :id',
+            ExpressionAttributeNames: {
+                '#id': 'id'
+            },
+            ExpressionAttributeValues: {
+                ':id': cartData?.Items[0].venueId
+            },
+            Limit: 1
+        }
+        const venueData = await ddb.query(venueQuery).promise();
+
+        // if venue not found, return error
+        if (venueData.Count == 0) {
+            next(new Error('Venue Not Found.!'));
+        }
+
+        // return response
+        return res.status(200).json({
+            code: 200,
+            message: 'success',
+            data: {
+                id: cartData?.Items[0].id,
+                userId: cartData?.Items[0].userId,
+                venueId: cartData?.Items[0].venueId,
+                products: cartData?.Items[0].products,
+                totalPrice: cartData?.Items[0].totalPrice,
+                orderStatus: cartData?.Items[0].orderStatus,
+                createdAt: cartData?.Items[0].createdAt,
+                updatedAt: cartData?.Items[0].updatedAt,
+                venue: venueCleanup(venueData?.Items[0])
+            }
+        });
+    } catch (e) {
+        next(e);
+    }
+}
