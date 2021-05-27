@@ -1,12 +1,14 @@
 import * as express from 'express';
 import { Request, Response } from 'express';
-import { profileIndex } from '../controller/profileController';
+import { cartDeleteValidate, cartShow, cartStore, cartStoreValidate, deleteCart } from '../controller/cartController';
 
 // Route Declare
 const route = express.Router();
 
 // Route List
-route.get('/', profileIndex);
+route.post('/cart', cartStoreValidate, cartStore);
+route.get('/cart', cartShow);
+route.delete('/cart', cartDeleteValidate, deleteCart);
 
 // health check api
 route.get('/health-check', (req: Request, res: Response) => {

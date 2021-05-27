@@ -107,12 +107,18 @@ const serverlessConfiguration: Serverless = {
     },
     custom: {
         webpack: {
+            packager: 'npm',
             webpackConfig: './webpack.config.js',
             includeModules: {
                 forceExclude: [
                     'aws-sdk'
                 ],
             },
+            packagerOptions: {
+                scripts: [
+                    'rm -rf node_modules/aws-sdk'
+                ]
+            }
         },
         project: {
             cognito: 'arn:aws:cognito-idp:${opt:region, "ap-southeast-2"}:${env:AWS_ACCOUNT_ID}:userpool/${env:COGNITO_POOL_ID}',
