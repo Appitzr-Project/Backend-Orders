@@ -20,13 +20,6 @@ export const cartStoreValidate = [
         .withMessage(trans('productId', validationMessage.notEmpty))
         .isUUID('4')
         .withMessage(trans('productId', validationMessage.isUUID)),
-    body('discountCode')
-        .optional()
-        .isString()
-        .withMessage(trans('discountCode', validationMessage.isString))
-        .custom((val, { req }) => {
-            // check if discount code found or not
-        }),
 ];
 
 export const cartStore = async (
@@ -46,7 +39,7 @@ export const cartStore = async (
         }
 
         // get detail input
-        const { venueId, productId, discountCode } = req.body;
+        const { venueId, productId } = req.body;
 
         // get user login
         const user = userDetail(req);
