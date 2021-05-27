@@ -23,6 +23,17 @@ export const cartStoreValidate = [
         .withMessage(trans('productId', validationMessage.isUUID)),
 ];
 
+export const cartDeleteValidate = [
+    body('venueId')
+        .optional()
+        .isUUID('4')
+        .withMessage(trans('venueId', validationMessage.isUUID)),
+    body('productId')
+        .optional()
+        .isUUID('4')
+        .withMessage(trans('productId', validationMessage.isUUID)),
+]
+
 export const cartStore = async (
     req: RequestAuthenticated,
     res: Response,
@@ -341,5 +352,194 @@ export const cartShow = async (
         });
     } catch (e) {
         next(e);
+    }
+}
+
+export const deleteCart = async (
+    req: RequestAuthenticated,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        // get detail input
+        const { venueId, productId } = req.body;
+        let venueData;
+
+        // get user login
+        const user = userDetail(req);
+
+        // get user detail
+        const userQuery: AWS.DynamoDB.DocumentClient.GetItemInput = {
+            TableName: userProfileModel.TableName,
+            Key: {
+                cognitoId: user?.sub,
+                email: user?.email
+            }
+        }
+        const userData = await ddb.get(userQuery).promise();
+
+        // if user profile detail not found, return error
+        if (!userData.Item) {
+            return next(new Error('User Data Not Found.!'));
+        }
+
+        // check if venue found in body request
+        if (venueId) {
+            // get venue detail
+            const venueQuery: AWS.DynamoDB.DocumentClient.QueryInput = {
+                TableName: venueProfileModel.TableName,
+                IndexName: 'idIndex',
+                KeyConditionExpression: '#id = :id',
+                ExpressionAttributeNames: {
+                    '#id': 'id'
+                },
+                ExpressionAttributeValues: {
+                    ':id': venueId
+                },
+                Limit: 1
+            }
+            venueData = await ddb.query(venueQuery).promise();
+
+            // if venue not found, return error
+            if (venueData.Count == 0) {
+                next(new Error('Venue Not Found.!'));
+            }
+        }
+
+        // find if user has cart or not
+        const cartQuery: AWS.DynamoDB.DocumentClient.QueryInput = {
+            TableName: ordersModel.TableName,
+            IndexName: 'userIdIndex',
+            KeyConditionExpression: '#uId = :uId',
+            FilterExpression: '#os = :os',
+            ExpressionAttributeNames: {
+                '#uId': 'userId',
+                '#os': 'orderStatus'
+            },
+            ExpressionAttributeValues: {
+                ':uId': userData?.Item.id,
+                ':os': 'cart'
+            },
+            Limit: 1
+        }
+        const cartData = await ddb.query(cartQuery).promise();
+
+        // if cart found
+        if (cartData && cartData.Count !== 0) {
+            if (cartData?.Items[0].venueId !== venueId) {
+                // delete cart
+                await deleteCartById(cartData?.Items[0].id, userData?.Item.id);
+
+                // return response
+                return res.status(200).json({
+                    code: 200,
+                    message: 'success'
+                });
+            } else {
+                // check if productId found in body request
+                if (productId) {
+                    const oldDataOrder = cartData?.Items[0];
+                    let oldDataProductOrder = oldDataOrder.products;
+
+                    // search if product already exist or not
+                    // if exist, then skip
+                    // if not, add object product to array
+                    oldDataProductOrder.forEach((val, index) => {
+                        if (val.id === productId) {
+                            delete oldDataProductOrder[index];
+                        }
+                    });
+
+                    // calculate total price
+                    const newPriceTotal: number = oldDataProductOrder.reduce((total, val) => { return total + val.price }, 0);
+
+                    // if price still 0, return error
+                    if (newPriceTotal == 0) {
+                        // delete cart
+                        await deleteCartById(cartData?.Items[0].id, userData?.Item.id);
+
+                        // return response
+                        return res.status(200).json({
+                            code: 200,
+                            message: 'success'
+                        });
+                    } else {
+                        // create query for update new data
+                        const orderDataUpdateQuery: AWS.DynamoDB.DocumentClient.UpdateItemInput = {
+                            TableName: ordersModel.TableName,
+                            Key: {
+                                id: oldDataOrder.id,
+                                userId: userData?.Item.id
+                            },
+                            UpdateExpression: `
+                                SET
+                                    #pr = :pr,
+                                    #tr = :tr,
+                                    #ua = :ua
+                            `,
+                            ExpressionAttributeNames: {
+                                '#pr': 'products',
+                                '#tr': 'totalPrice',
+                                '#ua': 'updatedAt'
+                            },
+                            ExpressionAttributeValues: {
+                                ':pr': oldDataProductOrder,
+                                ':tr': newPriceTotal,
+                                ':ua': new Date().toISOString()
+                            },
+                            ReturnValues: 'ALL_NEW'
+                        }
+
+                        // update data on db
+                        const orderUpdate = await ddb.update(orderDataUpdateQuery).promise();
+
+                        // return update data
+                        return res.status(200).json({
+                            code: 200,
+                            message: 'success',
+                            data: {
+                                id: orderUpdate?.Attributes.id,
+                                userId: orderUpdate?.Attributes.userId,
+                                venueId: orderUpdate?.Attributes.venueId,
+                                products: orderUpdate?.Attributes.products,
+                                totalPrice: orderUpdate?.Attributes.totalPrice,
+                                orderStatus: orderUpdate?.Attributes.orderStatus,
+                                createdAt: orderUpdate?.Attributes.createdAt,
+                                updatedAt: orderUpdate?.Attributes.updatedAt,
+                                venue: venueCleanup(venueData?.Items[0])
+                            }
+                        });
+                    }
+                } else {
+                    next(new Error('ProductId Not Found.!'));
+                }
+            }
+        }
+
+        // return response
+        return res.status(200).json({
+            code: 200,
+            message: 'Your Cart is Empty.!'
+        })
+
+    } catch (e) {
+        next(e);
+    }
+}
+
+
+const deleteCartById = async (id, userId) => {
+    try {
+        const cardQueryDeletebyUserId: AWS.DynamoDB.DocumentClient.DeleteItemInput = {
+            TableName: ordersModel.TableName,
+            Key: {
+                id: id,
+                userId: userId
+            }
+        }
+
+        await ddb.delete(cardQueryDeletebyUserId).promise();
+    } catch (e) {
+        throw e;
     }
 }
