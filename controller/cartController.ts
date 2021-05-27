@@ -1,6 +1,6 @@
 import { Response, NextFunction } from "express";
 import { body, validationResult } from 'express-validator';
-import { orders, ordersModel, userProfileModel, productsModel, products, venueProfileModel } from "@appitzr-project/db-model";
+import { orders, ordersModel, userProfileModel, productsModel, venueProfileModel, products } from "@appitzr-project/db-model";
 import { RequestAuthenticated, userDetail } from "@base-pojokan/auth-aws-cognito";
 import * as AWS from 'aws-sdk';
 import { validationMessage, trans } from '@base-pojokan/express-validate-message';
@@ -48,10 +48,6 @@ export const cartStore = async (
         // get detail input
         const { venueId, productId, discountCode } = req.body;
 
-        // variable to save data
-        let newPriceTotal: number = 0;
-        let orderDataInput: orders;
-
         // get user login
         const user = userDetail(req);
 
@@ -64,6 +60,8 @@ export const cartStore = async (
             }
         }
         const userData = await ddb.get(userQuery).promise();
+
+        // if user profile detail not found, return error
         if (!userData.Item) {
             return next(new Error('User Data Not Found.!'));
         }
@@ -82,6 +80,8 @@ export const cartStore = async (
             Limit: 1
         }
         const venueData = await ddb.query(venueQuery).promise();
+
+        // if venue not found, return error
         if (venueData.Count == 0) {
             next(new Error('Venue Not Found.!'));
         }
@@ -95,7 +95,6 @@ export const cartStore = async (
             },
             ConsistentRead: true
         }
-
         const productData = await ddb.get(productQuery).promise();
 
         // return error if product not found
@@ -146,18 +145,14 @@ export const cartStore = async (
                 });
 
                 // calculate total price
-                newPriceTotal = oldDataProductOrder.reduce((total, val) => { return total + val.price }, 0);
+                const newPriceTotal: number = oldDataProductOrder.reduce((total, val) => { return total + val.price }, 0);
 
+                // if price still 0, return error
                 if (newPriceTotal == 0) {
                     next(new Error('Price Total is 0'));
                 }
 
-                // orderDataInput = {
-                //     ...oldDataOrder,
-                //     ...{ products: oldDataProductOrder },
-                //     ...{ totalPrice: newPriceTotal }
-                // }
-
+                // create query for update new data
                 const orderDataUpdateQuery: AWS.DynamoDB.DocumentClient.UpdateItemInput = {
                     TableName: ordersModel.TableName,
                     Key: {
@@ -179,16 +174,27 @@ export const cartStore = async (
                         ':pr': oldDataProductOrder,
                         ':tr': newPriceTotal,
                         ':ua': new Date().toISOString()
-                    }
+                    },
+                    ReturnValues: 'ALL_NEW'
                 }
 
+                // update data on db
                 const orderUpdate = await ddb.update(orderDataUpdateQuery).promise();
 
                 // return update data
                 return res.status(200).json({
                     code: 200,
                     message: 'success',
-                    data: orderUpdate
+                    data: {
+                        id: orderUpdate?.Attributes.id,
+                        userId: orderUpdate?.Attributes.userId,
+                        venueId: orderUpdate?.Attributes.venueId,
+                        products: orderUpdate?.Attributes.products,
+                        totalPrice: orderUpdate?.Attributes.totalPrice,
+                        orderStatus: orderUpdate?.Attributes.orderStatus,
+                        createdAt: orderUpdate?.Attributes.createdAt,
+                        updatedAt: orderUpdate?.Attributes.updatedAt
+                    }
                 });
             } else {
 
@@ -205,9 +211,11 @@ export const cartStore = async (
             }
         }
 
+        // merge object product to array products
         const productDataArr = [];
         productDataArr.push(productData.Item);
 
+        // create new object order
         const orderInputNew: orders = {
             id: uuidv4(),
             userId: userData?.Item.id,
@@ -221,18 +229,28 @@ export const cartStore = async (
             updatedAt: new Date().toISOString()
         }
 
-        // create new data cart
-        const cartNew: AWS.DynamoDB.DocumentClient.PutItemInput = {
+        // create query save data cart
+        const cartNewQuery: AWS.DynamoDB.DocumentClient.PutItemInput = {
             TableName: ordersModel.TableName,
             Item: orderInputNew,
         }
-        await ddb.put(cartNew).promise();
+        // save to db
+        await ddb.put(cartNewQuery).promise();
 
         // return response
         return res.json({
             code: 200,
             message: "success",
-            data: orderInputNew
+            data: {
+                id: orderInputNew.id,
+                userId: orderInputNew.userId,
+                venueId: orderInputNew.venueId,
+                products: orderInputNew.products,
+                totalPrice: orderInputNew.totalPrice,
+                orderStatus: orderInputNew.orderStatus,
+                createdAt: orderInputNew.createdAt,
+                updatedAt: orderInputNew.updatedAt
+            }
         });
     } catch (e) {
         next(e);
