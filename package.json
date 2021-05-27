@@ -22,8 +22,9 @@
   },
   "homepage": "https://github.com/Appitzr-Project/Backend-Orders#readme",
   "dependencies": {
-    "@appitzr-project/db-model": "^1.0.25",
+    "@appitzr-project/db-model": "^1.0.35",
     "@base-pojokan/auth-aws-cognito": "^1.0.11",
+    "@base-pojokan/express-validate-message": "^0.4.0",
     "aws-sdk": "^2.848.0",
     "body-parser": "^1.19.0",
     "cors": "^2.8.5",
