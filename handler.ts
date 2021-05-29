@@ -26,7 +26,11 @@ app.all('*', (req: Request, res: Response, next: NextFunction) => {
 
 // Error Handle
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
-    res.status(422).json({
+    // print error message
+    console.log(error);
+
+    // return error response
+    return res.status(422).json({
         code: 422,
         success: false,
         message: error.message,
